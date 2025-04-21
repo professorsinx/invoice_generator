@@ -1,0 +1,810 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bus Ticket Invoice Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.9/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Asap:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    .invoice-box {
+      max-width: 900px;
+      margin: auto;
+      padding: 0;
+      font-size: 14px;
+      line-height: 20px;
+      font-family: 'Asap', sans-serif;
+      color: #333;
+    }
+    .invoice-box table {
+      width: 100%;
+      text-align: left;
+      border-collapse: collapse;
+    }
+    .invoice-box td {
+      padding: 10px;
+      vertical-align: middle;
+    }
+    .invoice-box .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #ccc;
+    }
+    .invoice-box .header img {
+      height: 40px;
+    }
+    .invoice-box .header .help {
+      text-align: right;
+      font-size: 12px;
+    }
+    .invoice-box .route {
+      font-size: 22px;
+      font-weight: bold;
+      border-bottom: 1px solid #fc0;
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+    }
+    .invoice-box .route img {
+      vertical-align: middle;
+      margin: 0 10px;
+    }
+    .invoice-box .details td {
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .invoice-box .fare {
+      text-align: right;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .invoice-box .fare-note {
+      font-size: 12px;
+      color: #999;
+    }
+    .invoice-box .contact {
+      margin-top: 20px;
+    }
+    .invoice-box .contact td {
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 12px;
+    }
+    .invoice-box .contact p {
+      font-weight: bold;
+      margin: 0;
+    }
+    .invoice-box .terms {
+      margin-top: 20px;
+      width: 900px;
+    }
+    .invoice-box .terms-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .invoice-box .terms-header hr {
+      height: 3px;
+      background-color: #333;
+      border: none;
+      margin: 0;
+    }
+    .invoice-box .terms-header .left-hr {
+      width: 40%;
+    }
+    .invoice-box .terms-header .right-hr {
+      width: 41%;
+    }
+    .invoice-box .terms-header .title {
+      width: 176px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .invoice-box .terms-content {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      line-height: 16px;
+    }
+    .invoice-box .terms-content ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .invoice-box .terms-content ul {
+      list-style: none;
+      margin: 0 0 10px;
+      padding: 0;
+    }
+    .invoice-box .terms-content ul li {
+      margin-left: 10px;
+    }
+    .invoice-box .terms-content .left {
+      width: 47%;
+    }
+    .invoice-box .terms-content .right {
+      width: 47%;
+    }
+    .invoice-box .terms-content .spacer {
+      width: 6%;
+    }
+    .invoice-box .terms-content p {
+      margin: 0 0 20px;
+      padding: 0;
+    }
+    .invoice-box .terms-content .bold {
+      font-weight: bold;
+    }
+    .invoice-box .cancellation-table {
+      width: 400px;
+      border: 1px solid #333;
+      margin: 0 0 7px;
+      font-size: 12px;
+    }
+    .invoice-box .cancellation-table th {
+      font-weight: bold;
+      border-bottom: 1px solid #333;
+      padding: 5px;
+      text-align: left;
+    }
+    .invoice-box .cancellation-table td {
+      padding: 5px;
+      border-bottom: 1px solid #333;
+      text-align: left;
+    }
+    .invoice-box .terms-footer {
+      margin-top: 10px;
+    }
+    .invoice-box .terms-footer hr {
+      border-top: 0px solid #ccc;
+    }
+    .invoice-box .new-contact {
+      margin-top: 20px;
+      width: 100%;
+    }
+    .invoice-box .new-contact tr {
+      margin: 0 0 10px;
+    }
+    .invoice-box .new-contact td {
+      border-bottom: 1px solid #e0e0e0;
+      padding-bottom: 10px;
+      font-size: 12px;
+    }
+    .invoice-box .new-contact p {
+      font-weight: bold;
+      margin: 0;
+      color: #333;
+    }
+    /* Print-specific styles */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      .invoice-box, .invoice-box * {
+        visibility: visible;
+      }
+      .invoice-box {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      img {
+        max-width: 100%;
+      }
+      .invoice-box .header, .invoice-box .route, .invoice-box .details td, .invoice-box .contact td, .invoice-box .cancellation-table, .invoice-box .new-contact td {
+        background: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    const BusTicketInvoiceGenerator = () => {
+      const [formData, setFormData] = useState({
+        operatorName: '',
+        operatorContact: '',
+        source: '',
+        destination: '',
+        journeyDate: '',
+        reportingTime: '',
+        departureTime: '',
+        boardingPoint: '',
+        landmark: '',
+        droppingPoint: '',
+        droppingLandmark: '',
+        ticketNo: '',
+        pnrNo: '',
+        busType: '',
+        passengerName: '',
+        passengerAge: 0,
+        passengerGender: 'MALE',
+        seatNumber: '',
+        totalFare: 0,
+        gst: 0,
+        serviceCharge: 0,
+        currency: 'Indian Rupee - ₹',
+        cancellationPolicy: [
+          { time: 'After 02:05 PM on 26th Jan', charges: 727.0 },
+          { time: 'Between 07:05 AM on 26th Jan - 02:05 PM on 26th Jan', charges: 363.5 },
+          { time: 'Between 07:05 PM on 25th Jan - 07:05 AM on 26th Jan', charges: 181.75 },
+          { time: 'Till 07:05 PM on 25th Jan', charges: 72.7 }
+        ],
+        fileName: 'Bus_Ticket_Invoice',
+        mTicket: true
+      });
+
+      const handleInputChange = (e) => {
+        const { name, value, type, checked } = e.target;
+
+        if (type === 'checkbox') {
+          setFormData({ ...formData, [name]: checked });
+        } else if (name === 'totalFare' || name === 'gst' || name === 'serviceCharge' || name === 'passengerAge') {
+          setFormData({ ...formData, [name]: value === '' ? 0 : parseFloat(value) || 0 });
+        } else if (name === 'journeyDate') {
+          // Reformat the date to dd-mm-yyyy
+          const [year, month, day] = value.split('-');
+          setFormData({ ...formData, [name]: `${day}-${month}-${year}` });
+        } else {
+          setFormData({ ...formData, [name]: value });
+        }
+      };
+
+      const populateSampleData = () => {
+        setFormData({
+          operatorName: 'Vetri Travels',
+          operatorContact: '9500200014',
+          source: 'Chennai',
+          destination: 'Karaikudi',
+          journeyDate: '2020-01-25',
+          reportingTime: '21:05',
+          departureTime: '21:20',
+          boardingPoint: 'Maraimalai Nagar Busstop',
+          landmark: 'Maraimalai Nagar, Chennai',
+          droppingPoint: 'Karaikudi New Bus Stand',
+          droppingLandmark: 'Near New Bus Stand, Karaikudi',
+          ticketNo: 'TP2V13380317',
+          pnrNo: 'VTA-AP-340314232854',
+          busType: 'A/C Sleeper (2+1)',
+          passengerName: 'Thayala Ruban L',
+          passengerAge: 30,
+          passengerGender: 'MALE',
+          seatNumber: 'U1',
+          totalFare: 763.35,
+          gst: 36.35,
+          serviceCharge: 0,
+          currency: 'Indian Rupee - ₹',
+          cancellationPolicy: [
+            { time: 'After 02:05 PM on 26th Jan', charges: 727.0 },
+            { time: 'Between 07:05 AM on 26th Jan - 02:05 PM on 26th Jan', charges: 363.5 },
+            { time: 'Between 07:05 PM on 25th Jan - 07:05 AM on 26th Jan', charges: 181.75 },
+            { time: 'Till 07:05 PM on 25th Jan', charges: 72.7 }
+          ],
+          fileName: 'Bus_Ticket_Invoice',
+          mTicket: true
+        });
+      };
+
+      const handlePrint = () => {
+        window.print();
+      };
+
+      const calculateTotal = () => {
+        return formData.totalFare + formData.gst + formData.serviceCharge;
+      };
+
+      const InvoicePreview = () => {
+        const currencySymbol = formData.currency.split(' - ')[1];
+        const total = calculateTotal();
+
+        return (
+          <div className="invoice-box">
+            <div className="header">
+              <div>
+                <img src="https://st.redbus.in/images/redbus-ticket-logo.gif" alt="redBus Logo" />
+                <span style={{ fontSize: '30px', marginLeft: '10px' }}>eTICKET</span>
+              </div>
+              <div className="help">
+                <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>Need help with your trip?</p>
+                <p><strong>Boarding Point Ph. No.:</strong> {formData.operatorContact || 'N/A'}</p>
+                <p><strong>Customer Care:</strong> +919945600000</p>
+                <p>Write to us <a href="https://www.redbus.in/info/redcare">here</a></p>
+              </div>
+            </div>
+            <hr style={{ borderTop: '0px solid #ccc' }} />
+            <div className="route">
+              <span>{formData.source || 'N/A'}</span>
+              <img src="https://st.redbus.in/images/arrow.png" alt="->" />
+              <span>{formData.destination || 'N/A'}</span>
+              <span style={{ marginLeft: '10px' }}>{formData.journeyDate || 'N/A'}</span>
+              <div style={{ fontSize: '12px', textAlign: 'right' }}>
+                <p style={{ fontWeight: 'bold', margin: '0' }}>Ticket no: {formData.ticketNo || 'N/A'}</p>
+                <p>PNR no: {formData.pnrNo || 'N/A'}</p>
+              </div>
+            </div>
+            <table className="details">
+              <tr>
+                <td style={{ width: '25%' }}>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.operatorName || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>{formData.busType || 'N/A'}</span>
+                </td>
+                <td style={{ width: '25%' }}>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.reportingTime || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Reporting time</span>
+                </td>
+                <td style={{ width: '25%' }}>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.departureTime || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Departure time</span>
+                </td>
+                <td style={{ width: '25%' }}>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>1</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Number of Passengers</span>
+                </td>
+              </tr>
+              <tr>
+                <td><p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>Boarding point details</p></td>
+                <td>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.boardingPoint || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Location</span>
+                </td>
+                <td>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.landmark || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Landmark</span>
+                </td>
+                <td>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.boardingPoint || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Address</span>
+                </td>
+              </tr>
+              <tr>
+                <td><p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>Dropping point details</p></td>
+                <td>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.droppingPoint || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Location</span>
+                </td>
+                <td>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.droppingLandmark || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Landmark</span>
+                </td>
+                <td>
+                  <p style={{ fontWeight: 'bold', margin: '0 0 5px' }}>{formData.droppingPoint || 'N/A'}</p>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Address</span>
+                </td>
+              </tr>
+            </table>
+            <table>
+              <tr>
+                <td style={{ width: '90%' }}>
+                  <p style={{ fontSize: '12px', color: '#999', margin: '0' }}>Passenger Details (Age, Gender)</p>
+                  <p style={{ margin: '0', textTransform: 'capitalize' }}>
+                    {formData.passengerName || 'N/A'} ({formData.passengerAge || 'N/A'}, {formData.passengerGender})
+                  </p>
+                </td>
+                <td>
+                  <p style={{ fontSize: '12px', color: '#999', margin: '0' }}>Seat Number</p>
+                  <p style={{ margin: '0', textTransform: 'capitalize' }}>{formData.seatNumber || 'N/A'}</p>
+                </td>
+              </tr>
+              {formData.mTicket && (
+                <tr>
+                  <td colSpan="2" style={{ borderTop: '1px solid #e0e0e0' }}>
+                    <span>NOTE: This operator accepts mTicket, you need not carry a print out</span>
+                  </td>
+                </tr>
+              )}
+              <tr>
+                <td></td>
+                <td className="fare">
+                  <p>Total Fare: {currencySymbol} {(Number(formData.totalFare) || 0).toFixed(2)}</p>
+                  <p className="fare-note">
+                    ({currencySymbol} {(Number(formData.gst) + Number(formData.serviceCharge) || 0).toFixed(2)} inclusive of GST and service charge, if any)
+                  </p>
+                </td>
+              </tr>
+            </table>
+            <table className="contact">
+              <tr>
+                <td>
+                  <p>For boarding point related</p>
+                  <span>{formData.operatorContact || 'N/A'}</span>
+                </td>
+                <td>
+                  <p>For time related</p>
+                  <span>{formData.operatorContact || 'N/A'}</span>
+                </td>
+                <td>
+                  <p>For all queries</p>
+                  <span>Call +919945600000 or write to us <a href="https://www.redbus.in/info/redcare">here</a></span>
+                </td>
+              </tr>
+            </table>
+            <div className="terms">
+              <div className="terms-header">
+                <hr className="left-hr" />
+                <div className="title">Terms and Conditions</div>
+                <hr className="right-hr" />
+              </div>
+              <div className="terms-content">
+                <div className="left">
+                  <ol>
+                    <li>
+                      <p style={{ height: '99px' }}>
+                        redBus* is an online ticketing platform. It does not operate bus services of its own. In order to provide a comprehensive choice of bus operators, departure times and prices to customers, it has tied up with many bus operators. redBus's advice to customers is to choose bus operators they are aware of and whose service they are comfortable with.
+                      </p>
+                      <p className="bold">redBus responsibilities include:</p>
+                      <ul>
+                        <li>(1) Issuing a valid ticket (a ticket that will be accepted by the bus operator) for its network of bus operators</li>
+                        <li>(2) Providing refund and support in the event of cancellation</li>
+                        <li>(3) Providing customer support and information in case of any delays / inconvenience</li>
+                      </ul>
+                      <p className="bold">redBus responsibilities do not include:</p>
+                      <ul>
+                        <li>(1) The bus operator's bus not departing / reaching on time.</li>
+                        <li>(2) The bus operator's employees being rude.</li>
+                        <li>(3) The bus operator's bus seats etc not being up to the customer's expectation.</li>
+                        <li>(4) The bus operator canceling the trip due to unavoidable reasons.</li>
+                        <li>(5) The baggage of the customer getting lost / stolen / damaged.</li>
+                        <li>(6) The bus operator changing a customer's seat at the last minute to accommodate a lady / child.</li>
+                        <li>(7) The customer waiting at the wrong boarding point (please call the bus operator to find out the exact boarding point if you are not a regular traveler on that particular bus).</li>
+                        <li>(8) The bus operator changing the boarding point and/or using a pick-up vehicle at the boarding point to take customers to the bus departure point.</li>
+                      </ul>
+                    </li>
+                    <li>
+                      <p>The departure time mentioned on the ticket are only tentative timings. However the bus will not leave the source before the time that is mentioned on the ticket.</p>
+                    </li>
+                  </ol>
+                </div>
+                <div className="spacer"></div>
+                <div className="right">
+                  <ol start="3">
+                    <li>
+                      <p>Passengers are required to furnish the following at the time of boarding the bus:<br />
+                        (1) A copy of the ticket (A print out of the ticket or the print out of the ticket e-mail).<br />
+                        (2) A valid identity proof<br />
+                        Failing to do so, they may not be allowed to board the bus.
+                      </p>
+                    </li>
+                    <li>
+                      <p>Change of bus: In case the bus operator changes the type of bus due to some reason, redBus will refund the differential amount to the customer upon being intimated by the customers in 24 hours of the journey.</p>
+                    </li>
+                    <li>
+                      <p>Amenities for this bus as shown on redBus have been configured and provided by the bus provider (bus operator). These amenities will be provided unless there are some exceptions on certain days. Please note that redBus provides this information in good faith to help passengers to make an informed decision. The liability of the amenity not being made available lies with the operator and not with redBus.</p>
+                    </li>
+                    <li>
+                      <p>In case a booking confirmation e-mail and sms gets delayed or fails because of technical reasons or as a result of incorrect e-mail ID / phone number provided by the user etc, a ticket will be considered 'booked' as long as the ticket shows up on the confirmation page of <a href="http://www.redBus.in" target="_blank">www.redBus.in</a></p>
+                    </li>
+                    <li>
+                      <p>Grievances and claims related to the bus journey should be reported to redBus support team within 10 days of your travel date.</p>
+                    </li>
+                    <li>
+                      <p>Please note the following regarding the luggage policy for your journey:<br />
+                        (1) Each passenger is allowed to carry one bag of upto 10 kgs and one personal item such as a laptop bag, handbag, or briefcase of upto 5 kgs.<br />
+                        (2) Passengers should not carry any goods like weapons, inflammable, firearms, ammunition, drugs, liquor, smuggled goods etc and any other articles that are prohibited under law.<br />
+                        (3) Bus Operator reserves the right to deny boarding or charge additional amount in case passenger is travelling with extra luggage than what is mentioned above.
+                      </p>
+                    </li>
+                    <li>
+                      <p>Partial Cancellation is <b>NOT</b> allowed for this ticket. Charges for complete ticket cancellation are mentioned below.</p>
+                      <div>
+                        <p>Cancellation of this ticket is <b>NOT</b> allowed after bus departure time.</p>
+                      </div>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+              <div className="terms-footer">
+                <hr />
+              </div>
+            </div>
+            <table className="new-contact">
+              <tr>
+                <td>
+                  <p>For boarding point related</p>
+                  <span>{formData.operatorContact || '9500200014/ 9500300014'}</span>
+                </td>
+                <td>
+                  <p>For time related</p>
+                  <span>{formData.operatorContact || '9500200014/ 9500300014'}</span>
+                </td>
+                <td>
+                  <p>Vetri Travels Customer Care:</p>
+                  <span></span>
+                </td>
+                <td>
+                  <p>For cancellation and refunds related</p>
+                  <span>
+                    Click on this <a href={`https://www.redbus.in/Cancellation/CheckCancellation?ticketNo=${formData.ticketNo || 'TP2V13380317'}&emailId=dayal27k@gmail.com`} target="_blank">link</a> for hassle free online cancellation
+                  </span>
+                </td>
+                <td>
+                  <p>For all queries</p>
+                  <span>Call +919945600000 or write to us <a href="https://www.redbus.in/info/redcare" target="_blank">here</a></span>
+                </td>
+              </tr>
+            </table>
+          </div>
+        );
+      };
+
+      return (
+        <div className="container mx-auto p-4">
+          <h1 className="text-3xl font-bold mb-4">Bus Ticket Invoice Generator</h1>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <button
+                onClick={populateSampleData}
+                className="bg-blue-500 text-white p-2 rounded mb-4"
+              >
+                Populate Sample Data
+              </button>
+              <button
+                onClick={handlePrint}
+                className="bg-green-500 text-white p-2 rounded mb-4 ml-2"
+              >
+                Print Ticket
+              </button>
+              <h2 className="text-xl font-semibold mb-2">Operator Details</h2>
+              <input
+                type="text"
+                name="operatorName"
+                value={formData.operatorName}
+                onChange={handleInputChange}
+                placeholder="Operator Name"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="text"
+                name="operatorContact"
+                value={formData.operatorContact}
+                onChange={handleInputChange}
+                placeholder="Operator Contact"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <h2 className="text-xl font-semibold mb-2 mt-4">Journey Details</h2>
+              <input
+                type="text"
+                name="source"
+                value={formData.source}
+                onChange={handleInputChange}
+                placeholder="Source"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="text"
+                name="destination"
+                value={formData.destination}
+                onChange={handleInputChange}
+                placeholder="Destination"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="date"
+                name="journeyDate"
+                value={formData.journeyDate}
+                onChange={handleInputChange}
+                placeholder="Journey Date"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="time"
+                name="reportingTime"
+                value={formData.reportingTime}
+                onChange={handleInputChange}
+                placeholder="Reporting Time"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="time"
+                name="departureTime"
+                value={formData.departureTime}
+                onChange={handleInputChange}
+                placeholder="Departure Time"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <textarea
+                name="boardingPoint"
+                value={formData.boardingPoint}
+                onChange={handleInputChange}
+                placeholder="Boarding Point"
+                className="w-full p-2 mb-2 border rounded"
+                rows="3"
+              />
+              <textarea
+                name="landmark"
+                value={formData.landmark}
+                onChange={handleInputChange}
+                placeholder="Boarding Landmark"
+                className="w-full p-2 mb-2 border rounded"
+                rows="3"
+              />
+              <textarea
+                name="droppingPoint"
+                value={formData.droppingPoint}
+                onChange={handleInputChange}
+                placeholder="Dropping Point"
+                className="w-full p-2 mb-2 border rounded"
+                rows="3"
+              />
+              <textarea
+                name="droppingLandmark"
+                value={formData.droppingLandmark}
+                onChange={handleInputChange}
+                placeholder="Dropping Landmark"
+                className="w-full p-2 mb-2 border rounded"
+                rows="3"
+              />
+              <h2 className="text-xl font-semibold mb-2 mt-4">Ticket Details</h2>
+              <input
+                type="text"
+                name="ticketNo"
+                value={formData.ticketNo}
+                onChange={handleInputChange}
+                placeholder="Ticket Number"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="text"
+                name="pnrNo"
+                value={formData.pnrNo}
+                onChange={handleInputChange}
+                placeholder="PNR Number"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="text"
+                name="busType"
+                value={formData.busType}
+                onChange={handleInputChange}
+                placeholder="Bus Type"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <label className="flex items-center mb-2">
+                <input
+                  type="checkbox"
+                  name="mTicket"
+                  checked={formData.mTicket}
+                  onChange={handleInputChange}
+                  className="mr-2"
+                />
+                Operator accepts mTicket
+              </label>
+              <h2 className="text-xl font-semibold mb-2 mt-4">Passenger Details</h2>
+              <input
+                type="text"
+                name="passengerName"
+                value={formData.passengerName}
+                onChange={handleInputChange}
+                placeholder="Passenger Name"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="number"
+                name="passengerAge"
+                value={formData.passengerAge}
+                onChange={handleInputChange}
+                placeholder="Passenger Age"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <select
+                name="passengerGender"
+                value={formData.passengerGender}
+                onChange={handleInputChange}
+                className="w-full p-2 mb-2 border rounded"
+              >
+                <option>MALE</option>
+                <option>FEMALE</option>
+                <option>OTHER</option>
+              </select>
+              <input
+                type="text"
+                name="seatNumber"
+                value={formData.seatNumber}
+                onChange={handleInputChange}
+                placeholder="Seat Number"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <h2 className="text-xl font-semibold mb-2 mt-4">Fare Details</h2>
+              <select
+                name="currency"
+                value={formData.currency}
+                onChange={handleInputChange}
+                className="w-full p-2 mb-2 border rounded"
+              >
+                <option>Indian Rupee - ₹</option>
+                <option>US Dollar - $</option>
+                <option>Euro - €</option>
+                <option>British Pound - £</option>
+              </select>
+              <input
+                type="number"
+                name="totalFare"
+                value={formData.totalFare}
+                onChange={handleInputChange}
+                placeholder="Base Fare"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="number"
+                name="gst"
+                value={formData.gst}
+                onChange={handleInputChange}
+                placeholder="GST"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="number"
+                name="serviceCharge"
+                value={formData.serviceCharge}
+                onChange={handleInputChange}
+                placeholder="Service Charge"
+                className="w-full p-2 mb-2 border rounded"
+              />
+              <input
+                type="text"
+                name="fileName"
+                value={formData.fileName}
+                onChange={handleInputChange}
+                placeholder="File Name"
+                className="w-full p-2 mb-2 border rounded"
+              />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold mb-2">Live Preview</h2>
+              <InvoicePreview />
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<BusTicketInvoiceGenerator />, document.getElementById('root'));
+  </script>
+</body>
+</html>
